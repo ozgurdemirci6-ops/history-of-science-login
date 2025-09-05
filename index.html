@@ -4,54 +4,104 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Bilim Tarihi – Giriş</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
   <style>
-    body {font-family: Arial, sans-serif; background:#101522; color:#eee; display:flex; justify-content:center; align-items:center; height:100vh; margin:0;}
-    .box {background:#1b2035; padding:30px; border-radius:12px; width:320px; text-align:center; box-shadow:0 8px 20px rgba(0,0,0,.4);}
-    h1 {font-size:20px; margin-bottom:15px;}
-    input {width:100%; padding:12px; margin:10px 0; border:1px solid #444; border-radius:8px; background:#0d1120; color:#fff;}
-    button {width:100%; padding:12px; border:none; border-radius:8px; background:#2f80ed; color:#fff; font-weight:bold; cursor:pointer;}
-    .msg {margin-top:10px; font-size:14px; min-height:20px;}
-    .ok {color:#16a34a;} .err {color:#ef4444;}
+    :root{--bg:#0b0b12;--card:#11121a;--muted:#9aa0a6;--ok:#16a34a;--err:#ef4444}
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(1200px 600px at 10% 10%,#141628,transparent),var(--bg);color:#e8eaed;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    .wrap{min-height:100svh;display:grid;place-items:center;padding:24px}
+    .card{width:100%;max-width:420px;background:linear-gradient(180deg,#131522 0%, #0f1120 100%);border:1px solid #202338;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+    .inner{padding:28px}
+    h1{font-size:20px;margin:0 0 8px}
+    p{margin:0 0 20px;color:var(--muted);line-height:1.6}
+    .row{display:flex;gap:12px}
+    label{font-size:12px;color:#cfd3dc;display:block;margin:0 0 6px}
+    input{width:100%;padding:14px 14px;border-radius:12px;border:1px solid #1f2334;background:#0e1120;color:#e8eaed;outline:none}
+    input:focus{border-color:#2f80ed;box-shadow:0 0 0 4px rgba(47,128,237,.15)}
+    button{padding:14px 16px;border:0;border-radius:12px;background:#2f80ed;color:white;font-weight:600;cursor:pointer}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .msg{margin-top:12px;font-size:13px;min-height:20px}
+    .ok{color:var(--ok)} .err{color:var(--err)}
+    .foot{margin-top:16px;font-size:12px;color:#7f8694}
   </style>
 </head>
 <body>
-  <div class="box">
-    <h1>Bilim Tarihi – Giriş</h1>
-    <p>Şifreyi giriniz:</p>
-    <form id="form">
-      <input id="pass" type="password" placeholder="Şifre" required />
-      <button type="submit">Giriş</button>
-      <div id="msg" class="msg"></div>
-    </form>
+  <div class="wrap">
+    <div class="card">
+      <div class="inner">
+        <h1>Bilim Tarihi – Giriş</h1>
+        <p>Derse erişmek için size verilen şifreyi giriniz.</p>
+
+        <form id="form">
+          <label for="pass">Şifre</label>
+          <div class="row">
+            <input id="pass" name="pass" type="password" placeholder="Şifre" autocomplete="current-password" required />
+            <button id="go" type="submit">Giriş</button>
+          </div>
+          <div id="msg" class="msg" aria-live="polite"></div>
+        </form>
+
+        <div class="foot">Yanlış şifre üç kez girilirse kısa bir bekleme uygulanır.</div>
+      </div>
+    </div>
   </div>
 
   <script>
-    const ASSISTANT_URL = "BURAYA_BILIM_TARIHI_ASISTANI_LINKI"; 
-    const PASS_SHA256_HEX = "e6a1d4669a3d15ee548eb8c0cfa9dbdfd2a01dd0a2bce95ac1cfb6e27f0f54aa"; 
-    // üstteki özet "Science2025" şifresi içindir
+    // ================== AYARLAR ==================
+    // Kendi asistan linkinizi buraya yazın:
+    // Örn: "https://chat.openai.com/g/xxxxxxxx-history-of-science-assistant"
+    const ASSISTANT_URL = "https://chat.openai.com";
+    // "Rocky" kelimesinin SHA-256 özeti:
+    const PASS_SHA256_HEX = "e7f5d4066c9f8195959866aa6915027679384f97ed822a03b8b1b3ce4ecfae5b";
+    // =============================================
 
     const form = document.getElementById('form');
     const pass = document.getElementById('pass');
-    const msg = document.getElementById('msg');
+    const msg  = document.getElementById('msg');
+    const btn  = document.getElementById('go');
+
+    let attempts = 0;
+    let lockedUntil = 0;
 
     async function sha256Hex(text){
-      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+      const enc = new TextEncoder().encode(text);
+      const buf = await crypto.subtle.digest('SHA-256', enc);
       return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
     }
 
     form.addEventListener('submit', async (e)=>{
       e.preventDefault();
-      msg.textContent = "Kontrol ediliyor...";
+
+      const now = Date.now();
+      if(now < lockedUntil){
+        const wait = Math.ceil((lockedUntil - now)/1000);
+        msg.textContent = `Çok fazla deneme. ${wait} sn sonra tekrar deneyin.`;
+        msg.className = "msg err";
+        return;
+      }
+
+      btn.disabled = true; msg.textContent = "Doğrulanıyor…"; msg.className = "msg";
+
       const hash = await sha256Hex(pass.value.trim());
       if(hash === PASS_SHA256_HEX){
-        msg.textContent = "Giriş başarılı! Yönlendiriliyorsunuz...";
+        msg.textContent = "Giriş başarılı, yönlendiriliyorsunuz…";
         msg.className = "msg ok";
-        setTimeout(()=> window.location.href = ASSISTANT_URL, 600);
-      } else {
-        msg.textContent = "Hatalı şifre!";
+        localStorage.setItem("hos_gate","ok");
+        setTimeout(()=> { window.location.href = ASSISTANT_URL; }, 500);
+      }else{
+        attempts++;
+        msg.textContent = "Şifre hatalı. Tekrar deneyin.";
         msg.className = "msg err";
+        if(attempts >= 3){
+          lockedUntil = Date.now() + 20000; // 20 sn kilit
+          attempts = 0;
+        }
       }
-      pass.value="";
+      btn.disabled = false;
+      pass.value = "";
+      pass.focus();
     });
   </script>
 </body>
